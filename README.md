@@ -1,4 +1,4 @@
-# THOUGHTS v2 — a SKOS thesaurus browser
+# skosThesaurusBrowser — a SKOS thesaurus browser
 
 Point it at a SPARQL endpoint holding a SKOS thesaurus and you get:
 
