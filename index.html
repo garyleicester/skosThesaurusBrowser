@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>…</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Symbols+2&display=swap">
+    <style>
+        /* CSS Variables for easy customization */
+        :root {
+            --font-family: Arial, sans-serif;
+            --font-size: 30px;
+            --label-font-size: 30px;
+            --relation-label-font-size: 12px;
+            --background-color: #fff;
+            --primary-color: #000;
+            --secondary-color: #000;
+            --link-color: #000;
+            --label-color: #000;
+            --node-fill-color: #E8E8E8; /* For concept nodes */
+            --related-node-fill-color: #fff; /* For related concepts */
+            --node-stroke-color: #000;
+            --relation-label-background: #fff;
+            --relation-label-stroke: #000;
+            --search-bar-background: #ccc;
+            --breadcrumb-bar-background: #fff;
+            --search-input-width: 80%;
+            --padding-small: 5px;
+            --padding-medium: 10px;
+            --padding-large: 15px;
+            --margin-small: 5px;
+            --margin-medium: 10px;
+            --margin-large: 15px;
+            --node-rect-height: 45px;
+            --node-rect-padding: 18px;
+            --node-stroke-width: 3;
+            --relation-label-padding: 4px;
+            --relation-label-stroke-width: 2;
+            --modal-z-index: 1000;
+            --overlay-background: rgba(0, 0, 0, 0.75);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            font-family: var(--font-family);
+            font-size: var(--font-size);
+        }
+
+        /* Search Container */
+        .search-container {
+            position: relative;
+            background-color: var(--search-bar-background);
+            padding: var(--padding-small) 0;
+            text-align: center;
+        }
+
+        /* Search row: input (+ download button when available), centred as one */
+        .search-row {
+            display: flex;
+            gap: var(--padding-small);
+            width: var(--search-input-width);
+            margin: 0 auto;
+        }
+
+        /* Search Input Style */
+        .search-input {
+            border: none;
+            padding: var(--padding-small);
+            flex: 1;
+            min-width: 0;
+            font-size: var(--font-size);
+        }
+
+        /* Download button: same white-on-grey block as the input, inverts on hover */
+        .data-download {
+            display: none;               /* shown by JS only if data is available */
+            align-items: center;
+            padding: var(--padding-small) var(--padding-medium);
+            background: #fff;
+            color: #000;
+            text-decoration: none;
+            font-size: var(--font-size);
+            white-space: nowrap;
+        }
+
+        .data-download:focus-visible {
+            background: #000;
+            color: #fff;
+            outline: none;
+        }
+        @media (hover: hover) {   /* touch screens keep :hover after a tap */
+            .data-download:hover { background: #000; color: #fff; }
+        }
+
+        .data-download .glyph {
+            font-family: 'Noto Sans Symbols 2', var(--font-family);
+            margin-right: 0.25em;
+        }
+
+        /* Search Results */
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: var(--search-input-width);
+            background-color: var(--background-color);
+            border: 1px solid #ccc;
+            z-index: 100;
+            display: none;
+            max-height: 300px;
+            overflow-y: auto;
+            text-align: left;
+        }
+
+        /* Breadcrumb Trail Bar */
+        .breadcrumb-bar {
+            background-color: var(--breadcrumb-bar-background);
+            padding: var(--padding-medium);
+            text-align: left;
+        }
+
+        .breadcrumb-bar span {
+            cursor: pointer;
+            color: var(--primary-color);
+        }
+
+        /* Main Content Container */
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Left and Right Columns */
+        .column {
+            flex: 1;
+            padding: var(--padding-small);
+            overflow-y: auto;
+        }
+
+        /* Hierarchical View */
+        .hierarchical-view {
+            background-color: var(--background-color);
+            border: 1px solid #ccc;
+        }
+
+        /* Tree View Styles */
+        .tree-view {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .tree-view li {
+            cursor: pointer;
+            margin: var(--margin-small);
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .tree-view span {
+            cursor: pointer;
+            margin-right: var(--margin-small);
+            user-select: none;
+        }
+
+		.tree-view span:first-child {
+			font-family: 'Noto Sans Symbols 2', var(--font-family);
+			display: inline-block;
+			line-height: 1.2;
+			vertical-align: baseline;
+		}
+
+        ul > li {
+            color: black;
+        }
+
+        li.focus {
+            color: grey;
+        }
+
+        /* Knowledge Graph */
+        .knowledge-graph {
+            background-color: var(--background-color);
+            border: 1px solid #ccc;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Node Styles */
+        .node {
+            fill: var(--primary-color);
+        }
+
+        .relatedConcept {
+            fill: var(--secondary-color);
+        }
+
+        .link {
+            stroke: var(--link-color);
+        }
+
+        .label {
+            font-size: var(--label-font-size);
+            fill: var(--label-color);
+            text-anchor: middle;
+            user-select: none;
+        }
+
+        .relation-label {
+            fill: var(--label-color);
+            font-variant: small-caps;
+            font-size: var(--relation-label-font-size);
+        }
+
+        .node-rect {
+            /* Additional styling if needed */
+        }
+
+        /* Shopping Basket Icon */
+        #shoppingBasket {
+            position: absolute;
+            top: var(--padding-medium);
+            right: var(--padding-medium);
+            cursor: pointer;
+        }
+
+        /* Concept Overlay */
+        #conceptOverlay,
+        #overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--overlay-background);
+            z-index: var(--modal-z-index);
+        }
+
+        #conceptOverlayContent,
+        #overlayContent {
+            position: absolute;
+            top: 10%;
+            left: 10%;
+            right: 10%;
+            bottom: 10%;
+            background-color: var(--background-color);
+            overflow: auto;
+            padding: var(--padding-medium);
+            box-shadow: 2px 2px 10px #000;
+        }
+
+        #conceptCloseButton,
+        #closeButton {
+            position: absolute;
+            top: var(--padding-small);
+            right: var(--padding-small);
+            background-color: #ff0000;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: var(--padding-small) var(--padding-medium);
+            font-size: var(--font-size);
+            cursor: pointer;
+        }
+
+        /* long URIs in the details card wrap instead of running off narrow screens */
+        #conceptOverlayContent a {
+            overflow-wrap: anywhere;
+        }
+
+        .modal-content p {
+            font-size: var(--font-size);
+        }
+
+        /* Adjustments for Dragged Concepts */
+        .dragged-concepts {
+            background-color: var(--background-color);
+            padding: var(--padding-medium) 0;
+            text-align: center;
+        }
+
+        .dragged-concept {
+            display: inline-block;
+            margin: var(--margin-small);
+            padding: var(--padding-small) var(--padding-medium);
+            background-color: #ccc;
+            border: 1px solid #999;
+            border-radius: 0;
+            height: 18px;
+            line-height: 18px;
+        }
+
+        /* Responsive SVG */
+        #graph {
+            width: 100%;
+            height: 100%;
+        }
+        .loading-text {
+            color: grey;
+            text-align: center;
+            animation: fadeInOut 1s infinite;
+            padding: var(--padding-small);
+        }
+
+        @keyframes fadeInOut {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 1; }
+        }
+
+        /* ── Basket / search overlay ───────────────────────────────────── */
+        #overlayContent {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* blurb: static text at top, plain, big */
+        #blurb {
+            font-size: var(--font-size);
+            color: #555;
+            margin: 0;
+        }
+
+        .basket-label {
+            font-size: 12px;
+            font-variant: small-caps;
+            letter-spacing: 0.08em;
+            color: #888;
+            margin-bottom: 6px;
+        }
+
+        .basket-hint {
+            font-size: 11px;
+            font-variant: normal;
+            color: #bbb;
+            letter-spacing: 0;
+        }
+
+        /* concepts: wrap inline like the dragged-concepts bar */
+        #conceptList {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0;
+        }
+
+        #basketEmpty {
+            color: #bbb;
+            font-style: italic;
+            font-size: var(--font-size);
+        }
+
+        /* chips: match the existing .dragged-concept aesthetic */
+        .basket-concept-item {
+            display: inline-flex;
+            align-items: center;
+            background-color: #ccc;
+            border: 1px solid #999;
+            border-radius: 0;
+            margin: var(--margin-small);
+            padding: var(--padding-small) var(--padding-medium);
+            font-size: var(--font-size);
+        }
+
+        .basket-concept-remove {
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-size: var(--font-size);
+            line-height: 1;
+            padding: 0 0 0 10px;
+            flex-shrink: 0;
+        }
+
+        .basket-concept-remove:hover { color: #f00; }
+
+        /* AND / OR toggle — same chunky button style as the rest */
+        .basket-operator-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .basket-operator-row .basket-label { margin-bottom: 0; }
+
+        #operatorToggle {
+            padding: var(--padding-small) var(--padding-medium);
+            font-size: var(--font-size);
+            cursor: pointer;
+        }
+
+        /* query preview: editable textarea, monospace, plain border */
+        #searchPreview {
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 16px;
+            font-family: monospace;
+            color: #333;
+            background: #fff;
+            border: 2px solid #000;
+            padding: var(--padding-small);
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        #doSearch {
+            padding: var(--padding-small) var(--padding-medium);
+            font-size: var(--font-size);
+            cursor: pointer;
+        }
+
+        #doSearch:disabled { opacity: 0.4; cursor: default; }
+
+
+        /* ── Mobile: tab layout ────────────────────────────────────────────── */
+        .mobile-tabs {
+            display: none; /* hidden on desktop */
+        }
+
+        @media (max-width: 768px) {
+            :root {
+                --font-size: 20px;
+                --label-font-size: 14px;
+                --search-input-width: 92%;
+                /* graph scaled down for phones */
+                --relation-label-font-size: 9px;
+                --node-rect-height: 28px;
+                --node-rect-padding: 9px;
+                --node-stroke-width: 2;
+                --relation-label-padding: 3px;
+                --relation-label-stroke-width: 1.5;
+            }
+
+            .mobile-tabs {
+                display: flex;
+                background-color: var(--search-bar-background);
+                border-top: 1px solid #bbb;
+            }
+
+            .mobile-tab {
+                flex: 1;
+                padding: var(--padding-medium);
+                font-size: var(--font-size);
+                font-family: var(--font-family);
+                background: none;
+                border: none;
+                cursor: pointer;
+                border-bottom: 3px solid transparent;
+            }
+
+            .mobile-tab.tab-active {
+                font-weight: bold;
+                border-bottom: 3px solid #000;
+                background: #fff;
+            }
+
+            /* stack columns, only show active one */
+            .main-container {
+                position: relative;
+                overflow: hidden;
+            }
+
+            .column {
+                position: absolute;
+                inset: 0;
+                display: none;
+                flex: none;
+                overflow-y: auto;
+            }
+
+            .column.tab-active {
+                display: block;
+            }
+
+            /* graph section must stay relative for the basket icon */
+            .knowledge-graph {
+                overflow: hidden;
+            }
+
+            /* overlay takes full screen on mobile */
+            #conceptOverlayContent,
+            #overlayContent {
+                top: 2%;
+                left: 2%;
+                right: 2%;
+                bottom: 2%;
+            }
+
+            /* brain icon smaller on mobile */
+            #shoppingBasket svg {
+                height: 4pc;
+                width: 4pc;
+            }
+        }
+
+        /* ── v2 additions ──────────────────────────────────────────────────── */
+
+        /* search results: one row per hit, keyboard-highlightable */
+        .search-result {
+            padding: var(--padding-small) var(--padding-medium);
+            cursor: pointer;
+        }
+        .search-result:hover,
+        .search-result.highlighted {
+            background-color: #ccc;
+        }
+        .search-result small {
+            color: #888;
+        }
+        .search-result.pending {
+            color: grey;
+            font-style: italic;
+        }
+
+        /* tree rows: icon + label as separate click targets */
+        .tree-view li > .tree-label { cursor: pointer; }
+        .tree-view li.focus > .tree-label { color: grey; }
+        li.focus { color: inherit; }   /* children of the focused row stay black */
+
+        /* breadcrumb: one line per route through the hierarchy */
+        .breadcrumb-trail + .breadcrumb-trail { margin-top: var(--margin-small); }
+        .breadcrumb-bar .sep { cursor: default; }
+
+        /* details overlay (rendered from details.py JSON) */
+        .details-uri {
+            font-family: monospace;
+            font-size: 14px;
+            color: #888;
+            overflow-wrap: anywhere;
+            margin: 0 3em var(--margin-large) 0;
+        }
+        .details-predicate { font-weight: bold; margin-top: var(--margin-medium); }
+        .details-predicate a { color: inherit; }
+        .details-value { padding-left: 20px; overflow-wrap: anywhere; }
+        .details-value .lang { color: #aaa; font-size: 0.6em; margin-left: 0.4em; }
+
+        /* pulsing "loading…" over the graph pane (the tree has its own) */
+        #graphLoading {
+            display: none;
+            position: absolute;
+            top: 45%;
+            left: 0;
+            right: 0;
+            pointer-events: none;
+        }
+        .tree-view li.loading-text { cursor: default; text-align: left; }
+
+        .status-message { color: grey; padding: var(--padding-medium); }
+        .error-message  { color: #c00; padding: var(--padding-medium); }
+
+    </style>
+</head>
+<body>
+    <!-- Concept Details Overlay -->
+    <div id="conceptOverlay">
+        <div id="conceptOverlayContent">
+            <button id="conceptCloseButton">X</button>
+            <div id="conceptDetails"></div>
+        </div>
+    </div>
+
+    <!-- Overlay for Stored Concepts -->
+    <div id="overlay">
+        <div id="overlayContent">
+            <button id="closeButton">X</button>
+
+            <p id="blurb"></p>
+
+            <div>
+                <div class="basket-label">concepts</div>
+                <div id="conceptList"></div>
+            </div>
+
+            <div class="basket-operator-row">
+                join with
+                <button id="operatorToggle" title="click to toggle AND / OR">AND</button>
+                click to toggle
+            </div>
+
+            <div>
+                <div class="basket-label">query preview / edit <span class="basket-hint">- retoggling AND/OR will reset any edits</span></div>
+                <textarea id="searchPreview" spellcheck="false"></textarea>
+            </div>
+
+            <button id="doSearch">Search</button>
+        </div>
+    </div>
+
+    <!-- Search Container -->
+    <div class="search-container">
+        <div class="search-row">
+            <input class="search-input" id="search-box" type="text" placeholder="Loading ..." disabled autocomplete="off">
+            <a class="data-download" id="dataDownload" href="download.py" download><span class="glyph">⭳</span>ttl</a>
+        </div>
+        <div class="search-results" id="search-results"></div>
+    </div>
+
+    <!-- Breadcrumb Trail Bar -->
+    <div class="breadcrumb-bar" id="my-breadcrumb-bar"></div>
+
+    <!-- Mobile tab bar (hidden on desktop via CSS) -->
+    <div class="mobile-tabs" id="mobileTabs">
+        <button class="mobile-tab" id="tabHierarchy" onclick="switchTab('hierarchy')">Hierarchy</button>
+        <button class="mobile-tab tab-active" id="tabGraph" onclick="switchTab('graph')">Graph</button>
+    </div>
+
+    <!-- Main Content Container -->
+    <div class="main-container">
+        <!-- Left Column (Hierarchical View) -->
+        <div class="column hierarchical-view" id="hierarchySection">
+            <ul id="thesaurusRoot" class="tree-view"></ul>
+        </div>
+
+        <!-- Right Column (Knowledge Graph) -->
+        <div class="column knowledge-graph tab-active" id="graphSection">
+            <svg id="graph"></svg>
+            <div id="graphLoading" class="loading-text"></div>
+            <!-- Brain / basket -->
+            <div id="shoppingBasket">
+<svg fill="#000000" height="8pc" width="8pc" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 463 463" xml:space="preserve">
+
+<g id="SVGRepo_bgCarrier" stroke-width="0"/>
+
+<g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"/>
+
+<g id="SVGRepo_iconCarrier"> <g> <path d="M151.245,222.446C148.054,237.039,135.036,248,119.5,248c-4.142,0-7.5,3.357-7.5,7.5s3.358,7.5,7.5,7.5 c23.774,0,43.522-17.557,46.966-40.386c14.556-1.574,27.993-8.06,38.395-18.677c2.899-2.959,2.85-7.708-0.109-10.606 c-2.958-2.897-7.707-2.851-10.606,0.108C184.947,202.829,172.643,208,159.5,208c-26.743,0-48.5-21.757-48.5-48.5 c0-4.143-3.358-7.5-7.5-7.5s-7.5,3.357-7.5,7.5C96,191.715,120.119,218.384,151.245,222.446z"/> <path d="M183,287.5c0-4.143-3.358-7.5-7.5-7.5c-35.014,0-63.5,28.486-63.5,63.5c0,0.362,0.013,0.725,0.019,1.088 C109.23,344.212,106.39,344,103.5,344c-4.142,0-7.5,3.357-7.5,7.5s3.358,7.5,7.5,7.5c26.743,0,48.5,21.757,48.5,48.5 c0,4.143,3.358,7.5,7.5,7.5s7.5-3.357,7.5-7.5c0-26.611-16.462-49.437-39.731-58.867c-0.178-1.699-0.269-3.418-0.269-5.133 c0-26.743,21.757-48.5,48.5-48.5C179.642,295,183,291.643,183,287.5z"/> <path d="M439,223.5c0-17.075-6.82-33.256-18.875-45.156c1.909-6.108,2.875-12.426,2.875-18.844 c0-30.874-22.152-56.659-51.394-62.329C373.841,91.6,375,85.628,375,79.5c0-19.557-11.883-36.387-28.806-43.661 C317.999,13.383,287.162,0,263.5,0c-13.153,0-24.817,6.468-32,16.384C224.317,6.468,212.653,0,199.5,0 c-23.662,0-54.499,13.383-82.694,35.839C99.883,43.113,88,59.943,88,79.5c0,6.128,1.159,12.1,3.394,17.671 C62.152,102.841,40,128.626,40,159.5c0,6.418,0.965,12.735,2.875,18.844C30.82,190.244,24,206.425,24,223.5 c0,13.348,4.149,25.741,11.213,35.975C27.872,270.087,24,282.466,24,295.5c0,23.088,12.587,44.242,32.516,55.396 C56.173,353.748,56,356.626,56,359.5c0,31.144,20.315,58.679,49.79,68.063C118.611,449.505,141.965,463,167.5,463 c27.995,0,52.269-16.181,64-39.674c11.731,23.493,36.005,39.674,64,39.674c25.535,0,48.889-13.495,61.71-35.437 c29.475-9.385,49.79-36.92,49.79-68.063c0-2.874-0.173-5.752-0.516-8.604C426.413,339.742,439,318.588,439,295.5 c0-13.034-3.872-25.413-11.213-36.025C434.851,249.241,439,236.848,439,223.5z M167.5,448c-21.029,0-40.191-11.594-50.009-30.256 c-0.973-1.849-2.671-3.208-4.688-3.751C88.19,407.369,71,384.961,71,359.5c0-3.81,0.384-7.626,1.141-11.344 c0.702-3.447-1.087-6.92-4.302-8.35C50.32,332.018,39,314.626,39,295.5c0-8.699,2.256-17.014,6.561-24.379 C56.757,280.992,71.436,287,87.5,287c4.142,0,7.5-3.357,7.5-7.5s-3.358-7.5-7.5-7.5C60.757,272,39,250.243,39,223.5 c0-14.396,6.352-27.964,17.428-37.221c2.5-2.09,3.365-5.555,2.14-8.574C56.2,171.869,55,165.744,55,159.5 c0-26.743,21.757-48.5,48.5-48.5s48.5,21.757,48.5,48.5c0,4.143,3.358,7.5,7.5,7.5s7.5-3.357,7.5-7.5 c0-33.642-26.302-61.243-59.421-63.355C104.577,91.127,103,85.421,103,79.5c0-13.369,8.116-24.875,19.678-29.859 c0.447-0.133,0.885-0.307,1.308-0.527C127.568,47.752,131.447,47,135.5,47c12.557,0,23.767,7.021,29.256,18.325 c1.81,3.727,6.298,5.281,10.023,3.47c3.726-1.809,5.28-6.296,3.47-10.022c-6.266-12.903-18.125-22.177-31.782-25.462 C165.609,21.631,184.454,15,199.5,15c13.509,0,24.5,10.99,24.5,24.5v97.051c-6.739-5.346-15.25-8.551-24.5-8.551 c-4.142,0-7.5,3.357-7.5,7.5s3.358,7.5,7.5,7.5c13.509,0,24.5,10.99,24.5,24.5v180.279c-9.325-12.031-22.471-21.111-37.935-25.266 c-3.999-1.071-8.114,1.297-9.189,5.297c-1.075,4.001,1.297,8.115,5.297,9.189C206.8,343.616,224,366.027,224,391.5 C224,422.654,198.654,448,167.5,448z M395.161,339.807c-3.215,1.43-5.004,4.902-4.302,8.35c0.757,3.718,1.141,7.534,1.141,11.344 c0,25.461-17.19,47.869-41.803,54.493c-2.017,0.543-3.716,1.902-4.688,3.751C335.691,436.406,316.529,448,295.5,448 c-31.154,0-56.5-25.346-56.5-56.5c0-2.109-0.098-4.2-0.281-6.271c0.178-0.641,0.281-1.314,0.281-2.012V135.5 c0-13.51,10.991-24.5,24.5-24.5c4.142,0,7.5-3.357,7.5-7.5s-3.358-7.5-7.5-7.5c-9.25,0-17.761,3.205-24.5,8.551V39.5 c0-13.51,10.991-24.5,24.5-24.5c15.046,0,33.891,6.631,53.033,18.311c-13.657,3.284-25.516,12.559-31.782,25.462 c-1.81,3.727-0.256,8.214,3.47,10.022c3.726,1.81,8.213,0.257,10.023-3.47C303.733,54.021,314.943,47,327.5,47 c4.053,0,7.933,0.752,11.514,2.114c0.422,0.22,0.86,0.393,1.305,0.526C351.883,54.624,360,66.13,360,79.5 c0,5.921-1.577,11.627-4.579,16.645C322.302,98.257,296,125.858,296,159.5c0,4.143,3.358,7.5,7.5,7.5s7.5-3.357,7.5-7.5 c0-26.743,21.757-48.5,48.5-48.5s48.5,21.757,48.5,48.5c0,6.244-1.2,12.369-3.567,18.205c-1.225,3.02-0.36,6.484,2.14,8.574 C417.648,195.536,424,209.104,424,223.5c0,26.743-21.757,48.5-48.5,48.5c-4.142,0-7.5,3.357-7.5,7.5s3.358,7.5,7.5,7.5 c16.064,0,30.743-6.008,41.939-15.879c4.306,7.365,6.561,15.68,6.561,24.379C424,314.626,412.68,332.018,395.161,339.807z"/> <path d="M359.5,240c-15.536,0-28.554-10.961-31.745-25.554C358.881,210.384,383,183.715,383,151.5c0-4.143-3.358-7.5-7.5-7.5 s-7.5,3.357-7.5,7.5c0,26.743-21.757,48.5-48.5,48.5c-13.143,0-25.447-5.171-34.646-14.561c-2.898-2.958-7.647-3.007-10.606-0.108 s-3.008,7.647-0.109,10.606c10.402,10.617,23.839,17.103,38.395,18.677C315.978,237.443,335.726,255,359.5,255 c4.142,0,7.5-3.357,7.5-7.5S363.642,240,359.5,240z"/> <path d="M335.5,328c-2.89,0-5.73,0.212-8.519,0.588c0.006-0.363,0.019-0.726,0.019-1.088c0-35.014-28.486-63.5-63.5-63.5 c-4.142,0-7.5,3.357-7.5,7.5s3.358,7.5,7.5,7.5c26.743,0,48.5,21.757,48.5,48.5c0,1.714-0.091,3.434-0.269,5.133 C288.462,342.063,272,364.889,272,391.5c0,4.143,3.358,7.5,7.5,7.5s7.5-3.357,7.5-7.5c0-26.743,21.757-48.5,48.5-48.5 c4.142,0,7.5-3.357,7.5-7.5S339.642,328,335.5,328z"/> </g> </g>
+
+    <!-- Counter with Background -->
+    <g>
+        <!-- Background Circle -->
+        <circle id="counterBackground" cx="231.5" cy="231.5" r="65" fill="white" />
+        <!-- Counter Text Element -->
+        <!-- keep the 0 tight against the tags: Firefox counts surrounding whitespace when centring -->
+        <text id="basketCounter" x="231.5" y="260" font-family="Verdana" font-size="80" fill="black" text-anchor="middle">0</text>
+    </g>
+</svg>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── Layout tuning (display only — data settings live in config.py) ──
+        const CONFIG = {
+            scriptBase: '',          // e.g. '/cgi-bin/' if the .py files live elsewhere
+
+            // Phone values kick in at or below mobileBreakpoint (same as the CSS).
+            // brainClearance: px kept clear around the brain icon.
+            // brainPush / edgePush: 0–1, how much of an overlap / overshoot is undone each tick.
+            // edgeMargin: px kept between nodes and the edge of the graph pane.
+            mobileBreakpoint: 768,
+            forces: {
+                desktop: { linkDistance: 200, linkStrength: 0.2, chargeStrength: -800, brainClearance: 20, brainPush: 0.5, edgeMargin: 8, edgePush: 0.3 },
+                mobile:  { linkDistance: 100, linkStrength: 0.3, chargeStrength: -250, brainClearance: 10, brainPush: 0.5, edgeMargin: 4, edgePush: 0.3 },
+            },
+        };
+
+        // ── State ──────────────────────────────────────────────────────────
+        // Everything is keyed by URI; labels are only for display.
+        let TREE = { roots: [], children: {}, labels: {}, settings: {} };
+        let PARENTS = {};            // uri → [parent uris], derived from TREE.children
+        let currentUri = null;
+        let svg = d3.select('#graph');
+        let simulation;
+
+        const $ = id => document.getElementById(id);
+        const label = uri => TREE.labels[uri] || uri;
+        const script = name => `${CONFIG.scriptBase}${name}`;
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        async function getJSON(url) {
+            const res = await fetch(url);
+            const data = await res.json().catch(() => ({ error: `${res.status} ${res.statusText}` }));
+            if (!res.ok || (data && data.error)) throw new Error(data.error || `${res.status}`);
+            return data;
+        }
+
+        function isTouchLayout() {
+            return window.innerWidth <= CONFIG.mobileBreakpoint || window.matchMedia('(hover: none)').matches;
+        }
+
+        function getForceConfig() {
+            return window.innerWidth <= CONFIG.mobileBreakpoint ? CONFIG.forces.mobile : CONFIG.forces.desktop;
+        }
+
+        // ── Start up ───────────────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateSvgSize();
+
+            // Pulse while the hierarchy loads; if it's taking a while, say why.
+            const loadingTree = '<li class="loading-text">loading the hierarchy …</li>';
+            $('thesaurusRoot').innerHTML = loadingTree;
+            setGraphLoading('loading the hierarchy …');
+            const slow = setTimeout(() => {
+                const msg = 'still loading the hierarchy … it’s a big one';
+                $('thesaurusRoot').innerHTML = `<li class="loading-text">${msg}</li>`;
+                setGraphLoading(msg);
+            }, 4000);
+
+            try {
+                TREE = await getJSON(script('tree.py'));
+            } catch (e) {
+                $('thesaurusRoot').innerHTML = `<li class="error-message">couldn't load the hierarchy: ${escapeHtml(e.message)}</li>`;
+                setGraphLoading(null);
+                return;
+            } finally {
+                clearTimeout(slow);
+            }
+            PARENTS = {};
+            for (const [parent, kids] of Object.entries(TREE.children)) {
+                for (const kid of kids) (PARENTS[kid] = PARENTS[kid] || []).push(parent);
+            }
+
+            const s = TREE.settings;
+            document.title = s.title || document.title;
+            $('doSearch').textContent = s.searchLabel || 'Search';
+            $('blurb').textContent = s.blurb || '';
+            basketOperator = s.searchOperator || 'AND';
+            $('operatorToggle').textContent = basketOperator;
+            if (!s.searchUrl) $('shoppingBasket').style.display = 'none';   // no search target: no brain
+            $('search-box').disabled = false;
+            $('search-box').placeholder = 'Search ...';
+
+            renderChildren($('thesaurusRoot'), TREE.roots);
+            openLoneRoot();
+            if (s.download) setUpDataDownload();
+            setUpSearch();
+
+            const fromHash = uriFromHash();
+            navigate(fromHash && TREE.labels[fromHash] ? fromHash : s.home, { collapse: false });
+        });
+
+        // ── Navigation (one entry point for tree, graph, breadcrumb, search, URL) ──
+        function navigate(uri, { collapse = true, fromTree = false } = {}) {
+            if (!uri) return;
+            currentUri = uri;
+            $('search-results').style.display = 'none';
+
+            const hash = '#uri=' + encodeURIComponent(uri);
+            if (location.hash !== hash) history.pushState(null, '', hash);
+
+            loadGraph(uri);
+            const paths = pathsTo(uri);
+            updateBreadcrumb(uri, paths);
+            if (fromTree) {
+                // clicked in the tree: open that row's children (as v1 did)
+                if ((TREE.children[uri] || []).length) setExpanded(fromTree, true);
+            } else {
+                if (collapse) collapseAll();
+                paths.forEach(expandPath);
+            }
+            highlightInTree(uri, !fromTree);
+
+            // On mobile: show the graph when a concept is chosen
+            if (window.innerWidth <= CONFIG.mobileBreakpoint) switchTab('graph');
+        }
+
+        function uriFromHash() {
+            const m = location.hash.match(/^#uri=(.+)$/);
+            return m ? decodeURIComponent(m[1]) : null;
+        }
+
+        // back / forward buttons, or a pasted link
+        window.addEventListener('popstate', () => {
+            const uri = uriFromHash();
+            if (uri && uri !== currentUri) navigate(uri);
+        });
+
+        // Every route from a root down to uri (polyhierarchy → several).
+        function pathsTo(uri, limit = 12) {
+            const out = [];
+            (function walk(node, trail) {
+                if (out.length >= limit) return;
+                const parents = PARENTS[node] || [];
+                if (!parents.length) { out.push([node, ...trail]); return; }
+                for (const p of parents) {
+                    if (trail.includes(p) || p === uri) continue;    // cycle guard
+                    walk(p, [node, ...trail]);
+                }
+            })(uri, []);
+            if (!out.length) out.push([uri]);
+            return out;
+        }
+
+        // ── Hierarchy (left) ───────────────────────────────────────────────
+        function renderChildren(parentEl, uris) {
+            let ul = parentEl.tagName === 'UL' ? parentEl : parentEl.querySelector(':scope > ul');
+            if (!ul) { ul = document.createElement('ul'); parentEl.appendChild(ul); }
+            ul.innerHTML = '';
+            uris.forEach(uri => ul.appendChild(buildTreeItem(uri)));
+        }
+
+        function buildTreeItem(uri) {
+            const li = document.createElement('li');
+            li.dataset.uri = uri;
+            const hasKids = (TREE.children[uri] || []).length > 0;
+
+            const icon = document.createElement('span');
+            icon.className = 'tree-icon';
+            icon.textContent = hasKids ? '⯈' : '⯀';
+
+            const text = document.createElement('span');
+            text.className = 'tree-label';
+            text.textContent = label(uri);
+            text.title = uri;
+
+            text.addEventListener('click', () => navigate(uri, { fromTree: li }));
+            icon.addEventListener('click', e => {
+                e.stopPropagation();
+                if (hasKids) setExpanded(li, !li.classList.contains('expanded'));
+            });
+
+            li.append(icon, text);
+            return li;
+        }
+
+        function setExpanded(li, open) {
+            const uri = li.dataset.uri;
+            const icon = li.querySelector(':scope > .tree-icon');
+            if (open) {
+                if (!li.classList.contains('expanded')) renderChildren(li, TREE.children[uri] || []);
+                li.classList.add('expanded');
+                icon.textContent = '⯆';
+            } else {
+                li.querySelector(':scope > ul')?.remove();
+                li.classList.remove('expanded');
+                icon.textContent = '⯈';
+            }
+        }
+
+        function collapseAll() {
+            document.querySelectorAll('#thesaurusRoot > li.expanded').forEach(li => setExpanded(li, false));
+            openLoneRoot();
+        }
+
+        // With a single scheme, keep it open so its top concepts show (as v1 did)
+        function openLoneRoot() {
+            const roots = $('thesaurusRoot').children;
+            if (roots.length === 1 && roots[0].dataset.uri) setExpanded(roots[0], true);
+        }
+
+        // Open the tree along one path (root → … → target), instantly — and
+        // the target's own children too, as v1 did.
+        function expandPath(path) {
+            let container = $('thesaurusRoot');
+            for (let i = 0; i < path.length; i++) {
+                const li = [...container.children].find(el => el.dataset.uri === path[i]);
+                if (!li || !(TREE.children[path[i]] || []).length) return;
+                setExpanded(li, true);
+                container = li.querySelector(':scope > ul');
+            }
+        }
+
+        function highlightInTree(uri, scroll) {
+            document.querySelectorAll('#thesaurusRoot li.focus').forEach(el => el.classList.remove('focus'));
+            const hits = [...document.querySelectorAll('#thesaurusRoot li')].filter(li => li.dataset.uri === uri);
+            hits.forEach(li => li.classList.add('focus'));
+            if (scroll && hits[0]) hits[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        // ── Breadcrumb ─────────────────────────────────────────────────────
+        function updateBreadcrumb(uri, paths) {
+            const bar = $('my-breadcrumb-bar');
+            bar.innerHTML = '';
+            paths.forEach(path => {
+                const trail = document.createElement('div');
+                trail.className = 'breadcrumb-trail';
+                path.forEach((step, i) => {
+                    if (i) trail.append(Object.assign(document.createElement('span'), { className: 'sep', textContent: ' / ' }));
+                    const crumb = document.createElement('span');
+                    crumb.textContent = label(step);
+                    crumb.addEventListener('click', () => navigate(step));
+                    trail.appendChild(crumb);
+                });
+                bar.appendChild(trail);
+            });
+        }
+
+        // ── Graph (right) ──────────────────────────────────────────────────
+        function setGraphLoading(text) {
+            const el = $('graphLoading');
+            el.textContent = text || '';
+            el.style.display = text ? 'block' : 'none';
+        }
+
+        let graphRequest = 0;
+        async function loadGraph(uri) {
+            const mine = ++graphRequest;
+            // only pulse if the endpoint is slow, so quick hops don't flicker
+            const slow = setTimeout(() => { if (mine === graphRequest) setGraphLoading(`loading ${label(uri)} …`); }, 600);
+            let data;
+            try {
+                data = await getJSON(`${script('concept.py')}?uri=${encodeURIComponent(uri)}`);
+            } catch (e) {
+                console.error('Error loading concept:', e);
+                if (mine === graphRequest) setGraphLoading(`couldn't load ${label(uri)}: ${e.message}`);
+                return;
+            } finally {
+                clearTimeout(slow);
+            }
+            if (mine !== graphRequest) return;   // a newer click has superseded this one
+            setGraphLoading(null);
+            svg.selectAll('*').remove();
+            updateVisualization(data);
+        }
+
+        // Custom d3 force: treat the brain/basket icon as a no-go box and push
+        // any node whose box (label + relation tag) overlaps it back out, along
+        // whichever direction is the shortest way out. Nodes being dragged
+        // (fx/fy set) are left alone so they can still be dropped on the brain.
+        function brainAvoidanceForce() {
+            let nodes = [];
+            function force() {
+                const svgEl = svg.node();
+                const brainEl = $('shoppingBasket');
+                if (!svgEl || !brainEl) return;
+                const s = svgEl.getBoundingClientRect();
+                const b = brainEl.getBoundingClientRect();
+                if (!b.width) return;  // graph tab hidden on mobile
+                const cfg = getForceConfig();
+                const pad = cfg.brainClearance;
+                const zone = {
+                    left: b.left - s.left - pad, right: b.right - s.left + pad,
+                    top: b.top - s.top - pad,    bottom: b.bottom - s.top + pad,
+                };
+                for (const n of nodes) {
+                    if (n.fx != null || !n.box) continue;
+                    const x = n.x + n.vx, y = n.y + n.vy;
+                    const left = x + n.box.x, right = left + n.box.width;
+                    const top = y + n.box.y,  bottom = top + n.box.height;
+                    if (right <= zone.left || left >= zone.right || bottom <= zone.top || top >= zone.bottom) continue;
+                    const exits = [
+                        { dx: zone.left - right, dy: 0 },
+                        { dx: zone.right - left, dy: 0 },
+                        { dx: 0, dy: zone.top - bottom },
+                        { dx: 0, dy: zone.bottom - top },
+                    ];
+                    let best = exits[0];
+                    for (const e of exits) if (Math.abs(e.dx) + Math.abs(e.dy) < Math.abs(best.dx) + Math.abs(best.dy)) best = e;
+                    n.vx += best.dx * cfg.brainPush;
+                    n.vy += best.dy * cfg.brainPush;
+                }
+            }
+            force.initialize = _ => { nodes = _; };
+            return force;
+        }
+
+        // Custom d3 force: nodes that stray past the edge of the graph pane are
+        // nudged back in — only those actually over an edge, and only by a
+        // fraction of the overshoot each tick, so it doesn't fight the
+        // repulsion and jitter. Too-wide labels are centred on that axis.
+        function edgeContainmentForce() {
+            let nodes = [];
+            function force() {
+                const svgEl = svg.node();
+                if (!svgEl) return;
+                const w = svgEl.clientWidth, h = svgEl.clientHeight;
+                if (!w || !h) return;
+                const cfg = getForceConfig();
+                const m = cfg.edgeMargin;
+                for (const n of nodes) {
+                    if (n.fx != null || !n.box) continue;
+                    const x = n.x + n.vx, y = n.y + n.vy;
+                    n.vx += overshoot(x + n.box.x, n.box.width, m, w - m) * cfg.edgePush;
+                    n.vy += overshoot(y + n.box.y, n.box.height, m, h - m) * cfg.edgePush;
+                }
+            }
+            function overshoot(start, size, lo, hi) {
+                if (size >= hi - lo) return (lo + hi) / 2 - (start + size / 2);
+                if (start < lo) return lo - start;
+                if (start + size > hi) return hi - (start + size);
+                return 0;
+            }
+            force.initialize = _ => { nodes = _; };
+            return force;
+        }
+
+        function updateVisualization(data) {
+            const width = svg.node().clientWidth;
+            const height = svg.node().clientHeight;
+            const css = name => getComputedStyle(document.documentElement).getPropertyValue(name);
+            const padding = parseInt(css('--node-rect-padding'));
+            const rectHeight = parseInt(css('--node-rect-height'));
+            const font = parseInt(css('--label-font-size')) + 'px Arial';
+            const labelPadding = parseInt(css('--relation-label-padding'));
+
+            // the concept itself, then its neighbours — all keyed by URI
+            const nodes = [{ id: data.uri, uri: data.uri, type: 'concept', label: data.label }];
+            const links = [];
+            data.related.forEach(r => {
+                nodes.push({ id: r.uri, uri: r.uri, type: 'relatedConcept', label: r.label, relation: r.relation });
+                links.push({ source: data.uri, target: r.uri, label: r.relation });
+            });
+
+            const link = svg.selectAll('.link')
+                .data(links)
+                .enter().append('line')
+                .attr('class', 'link');
+
+            const node = svg.selectAll('.node')
+                .data(nodes)
+                .enter().append('g')
+                .attr('class', d => `node ${d.type}`)
+                .call(d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended))
+                .on('click', function(event, d) {
+                    // No right-click on touch screens: tapping the concept you're
+                    // already on (the centre node) opens its details instead.
+                    if (d.type === 'concept') {
+                        if (isTouchLayout()) showConceptDetailsOverlay(d.uri);
+                        else navigate(d.uri);   // desktop: re-wobble, as ever
+                        return;
+                    }
+                    navigate(d.uri);
+                })
+                .on('contextmenu', function(event, d) {
+                    event.preventDefault();
+                    showConceptDetailsOverlay(d.uri);
+                });
+
+            const textWidth = d => getTextWidth(d.label, font) + padding * 2;
+
+            node.append('rect')
+                .attr('class', 'node-rect')
+                .style('fill', d => d.type === 'concept' ? 'var(--node-fill-color)' : 'var(--related-node-fill-color)')
+                .style('stroke', 'var(--node-stroke-color)')
+                .style('stroke-width', 'var(--node-stroke-width)')
+                .attr('width', textWidth)
+                .attr('height', rectHeight)
+                .attr('x', d => -textWidth(d) / 2)
+                .attr('y', -rectHeight / 2);
+
+            node.append('text')
+                .attr('class', 'label')
+                .attr('dy', '.35em')
+                .text(d => d.label);
+
+            node.each(function(d) {
+                const nodeElement = d3.select(this);
+                const mainRect = nodeElement.select('rect.node-rect');
+                const relationText = d.relation || (isTouchLayout() ? 'thisConcept ⓘ' : 'thisConcept');
+
+                const tag = nodeElement.append('text')
+                    .attr('class', 'relation-label')
+                    .attr('dy', '.35em')
+                    .text(relationText);
+
+                const bbox = tag.node().getBBox();
+                tag.attr('x', parseFloat(mainRect.attr('x')) + labelPadding)
+                   .attr('y', parseFloat(mainRect.attr('y')) - bbox.height);
+
+                nodeElement.insert('rect', 'text.relation-label')
+                    .attr('class', 'relation-label-rect')
+                    .attr('x', parseFloat(mainRect.attr('x')))
+                    .attr('y', parseFloat(mainRect.attr('y')) - bbox.height - bbox.height / 2 - labelPadding / 2)
+                    .attr('width', bbox.width + labelPadding * 2)
+                    .attr('height', bbox.height + labelPadding + 5)
+                    .style('fill', 'var(--relation-label-background)')
+                    .style('opacity', 1)
+                    .style('stroke', 'var(--relation-label-stroke)')
+                    .style('stroke-width', 'var(--relation-label-stroke-width)');
+
+                tag.raise();
+                d.box = this.getBBox();   // footprint, for brain + edge forces
+            });
+
+            const forceCfg = getForceConfig();
+            simulation = d3.forceSimulation()
+                .force('link', d3.forceLink().id(d => d.id).distance(forceCfg.linkDistance).strength(forceCfg.linkStrength))
+                .force('charge', d3.forceManyBody().strength(forceCfg.chargeStrength))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('edges', edgeContainmentForce())
+                .force('brain', brainAvoidanceForce());
+
+            simulation.nodes(nodes).on('tick', ticked);
+            simulation.force('link').links(links);
+
+            function ticked() {
+                link.attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+                node.attr('transform', d => `translate(${d.x},${d.y})`);
+            }
+
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+
+                const s = svg.node().getBoundingClientRect();
+                const x = event.x + s.left, y = event.y + s.top;
+                const b = $('shoppingBasket').getBoundingClientRect();
+                if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) {
+                    storeConcept(d.uri);
+                }
+            }
+        }
+
+        const measureCanvas = document.createElement('canvas').getContext('2d');
+        function getTextWidth(text, font) {
+            measureCanvas.font = font;
+            return measureCanvas.measureText(text).width;
+        }
+
+        function updateSvgSize() {
+            const graphSection = $('graphSection');
+            const width = graphSection.clientWidth;
+            const height = graphSection.clientHeight;
+            svg.attr('width', width).attr('height', height);
+
+            if (simulation) {
+                const forceCfg = getForceConfig();
+                simulation.force('link').distance(forceCfg.linkDistance).strength(forceCfg.linkStrength);
+                simulation.force('charge').strength(forceCfg.chargeStrength);
+                simulation.force('center', d3.forceCenter(width / 2, height / 2));
+                simulation.alpha(1).restart();
+            }
+        }
+        window.addEventListener('resize', updateSvgSize);
+
+        // ── Mobile tab switching ───────────────────────────────────────────
+        function switchTab(tab) {
+            const showGraph = tab !== 'hierarchy';
+            $('hierarchySection').classList.toggle('tab-active', !showGraph);
+            $('tabHierarchy').classList.toggle('tab-active', !showGraph);
+            $('graphSection').classList.toggle('tab-active', showGraph);
+            $('tabGraph').classList.toggle('tab-active', showGraph);
+            if (showGraph) setTimeout(updateSvgSize, 10);   // recalculate now it's visible
+        }
+
+        // ── Search (top) ───────────────────────────────────────────────────
+        // Concept names are matched instantly from the tree; synonyms come
+        // from search.py a moment later and are merged in.
+        let searchTimer, searchController, searchResults = [], activeResult = -1;
+
+        function setUpSearch() {
+            const box = $('search-box');
+            box.addEventListener('input', () => {
+                const q = box.value.trim();
+                if (q.length >= 3) runSearch(q);
+                else hideResults();
+            });
+            box.addEventListener('keydown', e => {
+                if (!searchResults.length) return;
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    const n = searchResults.length;
+                    activeResult = (activeResult + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+                    paintActive();
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    pickResult(searchResults[Math.max(activeResult, 0)]);
+                } else if (e.key === 'Escape') {
+                    hideResults();
+                }
+            });
+            document.addEventListener('click', e => {
+                if (!e.target.closest('#search-box, #search-results')) hideResults();
+            });
+        }
+
+        function runSearch(q) {
+            clearTimeout(searchTimer);
+            const lc = q.toLowerCase();
+            const local = Object.entries(TREE.labels)
+                .filter(([, l]) => l.toLowerCase().includes(lc))
+                .map(([uri, l]) => ({ uri, label: l, score: l.toLowerCase().startsWith(lc) ? 0 : 1 }));
+            showResults(local, q, true);
+
+            searchTimer = setTimeout(async () => {
+                if (searchController) searchController.abort();
+                const controller = searchController = new AbortController();
+                try {
+                    const res = await fetch(`${script('search.py')}?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+                    const remote = await res.json();
+                    if (controller.signal.aborted || $('search-box').value.trim() !== q) return;
+                    const merged = {};
+                    for (const r of [...local, ...(Array.isArray(remote) ? remote : []).map(r => ({
+                        ...r, score: r.synonym.toLowerCase().startsWith(lc) ? 0.5 : 1.5 }))]) {
+                        if (!merged[r.uri] || r.score < merged[r.uri].score) merged[r.uri] = r;
+                    }
+                    showResults(Object.values(merged), q, false);
+                } catch (e) {
+                    if (e.name !== 'AbortError') showResults(local, q, false);
+                }
+            }, 300);
+        }
+
+        function showResults(results, q, pending) {
+            const div = $('search-results');
+            searchResults = results.sort((a, b) => a.score - b.score || a.label.localeCompare(b.label)).slice(0, 100);
+            activeResult = -1;
+            const mark = text => escapeHtml(text).replace(
+                new RegExp(`(${escapeHtml(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<b>$1</b>');
+
+            // same name, different concepts (Mercury the planet / the element):
+            // say where each lives
+            const counts = {};
+            searchResults.forEach(r => { counts[r.label] = (counts[r.label] || 0) + 1; });
+            const where = r => counts[r.label] > 1 && PARENTS[r.uri]
+                ? ` <small>in ${escapeHtml(PARENTS[r.uri].map(label).join(', '))}</small>` : '';
+
+            div.innerHTML = searchResults.map((r, i) => r.synonym
+                ? `<div class="search-result" data-i="${i}">${mark(r.synonym)} <small>- <i>synonym of</i> ${escapeHtml(r.label)}</small>${where(r)}</div>`
+                : `<div class="search-result" data-i="${i}">${mark(r.label)}${where(r)}</div>`).join('')
+                + (pending ? '<div class="search-result pending">also searching synonyms…</div>'
+                           : (searchResults.length ? '' : '<div class="search-result pending">nothing found</div>'));
+            div.querySelectorAll('.search-result[data-i]').forEach(el =>
+                el.addEventListener('click', () => pickResult(searchResults[+el.dataset.i])));
+            div.style.display = 'block';
+        }
+
+        function paintActive() {
+            document.querySelectorAll('#search-results .search-result[data-i]').forEach((el, i) => {
+                el.classList.toggle('highlighted', i === activeResult);
+                if (i === activeResult) el.scrollIntoView({ block: 'nearest' });
+            });
+        }
+
+        function hideResults() {
+            $('search-results').style.display = 'none';
+            searchResults = [];
+            activeResult = -1;
+        }
+
+        function pickResult(r) {
+            if (!r) return;
+            clearTimeout(searchTimer);
+            if (searchController) searchController.abort();
+            const box = $('search-box');
+            box.value = r.label;          // the full concept, not what was typed
+            box.blur();
+            hideResults();
+            navigate(r.uri);
+        }
+
+        // ── Download button ────────────────────────────────────────────────
+        async function setUpDataDownload() {
+            try {
+                const info = await getJSON(`${script('download.py')}?info=1`);
+                if (!info.available) return;
+                const btn = $('dataDownload');
+                btn.href = script('download.py');
+                btn.setAttribute('download', info.filename);
+                const size = info.bytes ? `, ${Math.round(info.bytes / 1024)} KB` : '';
+                const when = info.live ? 'live from the endpoint' : `built ${info.modified}`;
+                btn.title = `download the whole graph as RDF / Turtle (${info.filename}${size}, ${when})`;
+                btn.style.display = 'inline-flex';
+
+                const alt = Object.assign(document.createElement('link'), {
+                    rel: 'alternate', type: 'text/turtle', href: btn.href, title: `${TREE.settings.title} (RDF / Turtle)` });
+                document.head.appendChild(alt);
+            } catch (e) { /* no data: no button */ }
+        }
+
+        // ── Brain / basket ─────────────────────────────────────────────────
+        let storedConcepts = new Set();   // URIs
+        let basketOperator = 'AND';
+
+        function storeConcept(uri) {
+            if (!storedConcepts.has(uri)) {
+                storedConcepts.add(uri);
+                renderConceptList();
+                updateCounter();
+                refreshSearchPreview();
+            }
+        }
+
+        function removeConcept(uri) {
+            storedConcepts.delete(uri);
+            renderConceptList();
+            updateCounter();
+            refreshSearchPreview();
+        }
+
+        function renderConceptList() {
+            const list = $('conceptList');
+            list.innerHTML = '';
+            if (!storedConcepts.size) {
+                list.innerHTML = '<div id="basketEmpty">drag concepts from the graph to build a search</div>';
+                return;
+            }
+            storedConcepts.forEach(uri => {
+                const item = document.createElement('div');
+                item.className = 'basket-concept-item';
+                const text = document.createElement('span');
+                text.textContent = label(uri);
+                const btn = document.createElement('button');
+                btn.className = 'basket-concept-remove';
+                btn.textContent = '✕';
+                btn.title = 'remove';
+                btn.addEventListener('click', () => removeConcept(uri));
+                item.append(text, btn);
+                list.appendChild(item);
+            });
+        }
+
+        // Rebuild the query from current concepts + operator (overwrites manual edits)
+        function refreshSearchPreview() {
+            const terms = [...storedConcepts].map(uri => `"${label(uri)}"`);
+            $('searchPreview').value = terms.join(` ${basketOperator} `);
+            $('doSearch').disabled = terms.length === 0;
+        }
+
+        $('operatorToggle').addEventListener('click', function() {
+            basketOperator = basketOperator === 'AND' ? 'OR' : 'AND';
+            this.textContent = basketOperator;
+            refreshSearchPreview();
+        });
+
+        $('shoppingBasket').addEventListener('click', () => {
+            $('overlay').style.display = 'block';
+            renderConceptList();
+            refreshSearchPreview();
+        });
+
+        $('closeButton').addEventListener('click', () => { $('overlay').style.display = 'none'; });
+
+        $('doSearch').addEventListener('click', () => {
+            const query = $('searchPreview').value.trim();
+            if (!query) return;
+            window.open((TREE.settings.searchUrl || 'https://www.google.com/search?q=') + encodeURIComponent(query), '_blank');
+        });
+
+        function updateCounter() {
+            const counter = $('basketCounter');
+            if (storedConcepts.size > 0) {
+                counter.textContent = '✔';
+                setTimeout(() => { counter.textContent = '+'; }, 2000);
+            } else {
+                counter.textContent = '0';
+            }
+        }
+
+        // ── Details overlay ────────────────────────────────────────────────
+        $('conceptCloseButton').addEventListener('click', () => { $('conceptOverlay').style.display = 'none'; });
+
+        async function showConceptDetailsOverlay(uri) {
+            const box = $('conceptDetails');
+            box.innerHTML = `<div class="status-message">loading details for ${escapeHtml(label(uri))}…</div>`;
+            $('conceptOverlay').style.display = 'block';
+
+            let data;
+            try {
+                data = await getJSON(`${script('details.py')}?uri=${encodeURIComponent(uri)}`);
+            } catch (e) {
+                box.innerHTML = `<div class="error-message">couldn't load details: ${escapeHtml(e.message)}</div>`;
+                return;
+            }
+
+            const lang = l => l ? `<span class="lang">${escapeHtml(l)}</span>` : '';
+            const value = v => {
+                if (!v.isIri) return `<div class="details-value">${escapeHtml(v.value)}${lang(v.lang)}</div>`;
+                const text = escapeHtml(v.label || TREE.labels[v.value] || v.value);
+                // in the hierarchy → navigate here; anything else → open it
+                return TREE.labels[v.value]
+                    ? `<div class="details-value"><a href="#uri=${encodeURIComponent(v.value)}" data-uri="${escapeHtml(v.value)}">${text}</a></div>`
+                    : `<div class="details-value"><a href="${escapeHtml(v.value)}" target="_blank" rel="noopener">${text}</a></div>`;
+            };
+
+            box.innerHTML =
+                `<div class="details-uri">${escapeHtml(data.uri)}</div>` +
+                data.properties.map(p =>
+                    `<div class="details-predicate"><a href="${escapeHtml(p.predicate)}" target="_blank" rel="noopener" title="${escapeHtml(p.predicate)}">${escapeHtml(p.name)}</a></div>` +
+                    p.values.map(value).join('')
+                ).join('');
+
+            box.querySelectorAll('a[data-uri]').forEach(a => a.addEventListener('click', e => {
+                e.preventDefault();
+                $('conceptOverlay').style.display = 'none';
+                navigate(a.dataset.uri);
+            }));
+        }
+
+    </script>
+</body>
+</html>
